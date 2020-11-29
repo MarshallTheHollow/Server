@@ -17,6 +17,7 @@ namespace TCPserver
         static ServerObject server;
         static Thread listenThread;
         public static List<ClientObject> clients = new List<ClientObject>();
+        public static List<string> messages = new List<string>();
         static void Main(string[] args)
         {
             Console.WriteLine("Введите ip для сервера");
@@ -70,12 +71,24 @@ namespace TCPserver
                         try
                         {
                             if (GetClientNumber(Id) <= 4)
-                            {                                                               
-                                Thread.Sleep(6000);
+                            {                               
                                 string message = GetMessage();
-                                Console.WriteLine($"Поток номер {GetClientNumber(Id)}, " + DateTime.Now.ToShortTimeString() + ": " + message.ToString());
-                                string builder = znach[rnd.Next(0, 4)] + message.ToString();
-                                SendMessage(builder);
+                                server.AddMessage(message);
+                                Thread.Sleep(6000);
+                                if (server.DupletCheck(message) == false)
+                                {                                  
+                                    Console.WriteLine($"Поток номер {GetClientNumber(Id)}, " + DateTime.Now.ToShortTimeString() + ": " + message.ToString());
+                                    server.RemoveMessage(message);
+                                    string builder = znach[rnd.Next(0, 4)] + message.ToString();
+                                    SendMessage(builder);
+                                }
+                                else
+                                {
+                                    server.RemoveMessage(message);
+                                    string builder = "Повторка :с";
+                                    SendMessage(builder);
+                                }
+                                
                             }
                             else
                             {
@@ -113,7 +126,7 @@ namespace TCPserver
                     builder.Append(Encoding.Unicode.GetString(data, 0, bytes));
                 }
                 while (Stream.DataAvailable);
-
+                
                 return builder.ToString();
             }
             private void SendMessage(string builder)
@@ -145,6 +158,33 @@ namespace TCPserver
                 ClientObject client = clients.FirstOrDefault(c => c.Id == id);
                 if (client != null)
                     clients.Remove(client);               
+            }
+            protected internal void AddMessage(string message)
+            {
+                messages.Add(message);
+            }
+            protected internal void RemoveMessage(string message)
+            {
+                messages.Remove(message);
+            }
+            protected internal bool DupletCheck(string message)
+            {
+                int i = 0;
+                foreach (string element in messages)
+                {
+                    if (message == element)
+                    {
+                        i++;                    
+                    }                   
+                }
+                if (i > 1)
+                {
+                    return true;
+                }
+                else
+                {
+                    return false;
+                }
             }
             protected internal void Listen()
             {
