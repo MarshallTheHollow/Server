@@ -18,6 +18,7 @@ namespace TCPserver
         static Thread listenThread;
         public static List<ClientObject> clients = new List<ClientObject>();
         public static List<string> messages = new List<string>();
+        public static List<Tuple<string,string>> clientmessage = new List<Tuple<string,string>>();
         static void Main(string[] args)
         {
             Console.WriteLine("Введите ip для сервера");
@@ -59,6 +60,13 @@ namespace TCPserver
                     return clients.IndexOf(client);
                 return 0;
             }
+            protected internal NetworkStream GetClientStream(string id)
+            {
+                ClientObject client = clients.FirstOrDefault(c => c.Id == id);
+                if (client != null)
+                    return client.Stream;               
+                return null;
+            }
 
             public void Process()
             {
@@ -74,19 +82,19 @@ namespace TCPserver
                             {                               
                                 string message = GetMessage();
                                 server.AddMessage(message);
-                                Thread.Sleep(6000);
                                 if (server.DupletCheck(message) == false)
-                                {                                  
+                                {
+                                    Thread.Sleep(6000);
                                     Console.WriteLine($"Поток номер {GetClientNumber(Id)}, " + DateTime.Now.ToShortTimeString() + ": " + message.ToString());
                                     server.RemoveMessage(message);
                                     string builder = znach[rnd.Next(0, 4)] + message.ToString();
-                                    SendMessage(builder);
+                                    SendMessage(builder,message);
+                                    clientmessage.Clear();
                                 }
                                 else
                                 {
+                                    clientmessage.Add(Tuple.Create(Id, message));                                  
                                     server.RemoveMessage(message);
-                                    string builder = "Повторка :с";
-                                    SendMessage(builder);
                                 }
                                 
                             }
@@ -133,7 +141,20 @@ namespace TCPserver
             {
                 byte[] data = new byte[256];
                 data = Encoding.Unicode.GetBytes(builder);
-                Stream.Write(data, 0, data.Length);
+                Stream.Write(data, 0, data.Length);            
+            }
+            private void SendMessage(string builder, string message)
+            {
+                byte[] data = new byte[256];
+                data = Encoding.Unicode.GetBytes(builder);
+                Stream.Write(data, 0, data.Length); //отправляет сообщение первому клиенту               
+                foreach ((string elementID, string elementMESS) in clientmessage)
+                {
+                    if(elementMESS == message)
+                    {
+                        GetClientStream(elementID).Write(data, 0, data.Length); //отправляет сообщение клиентам с повторкой
+                    }                   
+                }
             }
 
             protected internal void Close()
@@ -193,15 +214,12 @@ namespace TCPserver
                     tcpListener = new TcpListener(serverip, port);
                     tcpListener.Start();
                     Console.WriteLine("Сервер запущен. Седим пердим...");
-
                     while (true)
                     {
-
                         TcpClient tcpClient = tcpListener.AcceptTcpClient();
                         ClientObject clientObject = new ClientObject(tcpClient, this);
                         Thread clientThread = new Thread(new ThreadStart(clientObject.Process));
                         clientThread.Start();
-
                     }
                 }
                 catch (Exception ex)
