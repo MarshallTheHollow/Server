@@ -17,8 +17,8 @@ namespace TCPserver
         static ServerObject server;
         static Thread listenThread;
         public static List<ClientObject> clients = new List<ClientObject>();
-        public static List<string> messages = new List<string>();
         public static List<Tuple<string,string>> clientmessage = new List<Tuple<string,string>>();
+        public static List<Tuple<string, string>> Dupletmessage = new List<Tuple<string, string>>();
         static void Main(string[] args)
         {
             Console.WriteLine("Введите ip для сервера");
@@ -78,26 +78,40 @@ namespace TCPserver
                     {
                         try
                         {
-                            if (GetClientNumber(Id) <= 4)
-                            {                               
+                            if (GetClientNumber(Id) <= 3)
+                            {
                                 string message = GetMessage();
-                                server.AddMessage(message);
+                                server.AddMessage(Id, message);
+                                Thread.Sleep(6000);
                                 if (server.DupletCheck(message) == false)
-                                {
-                                    Thread.Sleep(6000);
-                                    Console.WriteLine($"Поток номер {GetClientNumber(Id)}, " + DateTime.Now.ToShortTimeString() + ": " + message.ToString());
-                                    server.RemoveMessage(message);
-                                    string builder = znach[rnd.Next(0, 4)] + message.ToString();
-                                    SendMessage(builder,message);
-                                    clientmessage.Clear();
+                                {                                   
+                                    if(server.RestartCheck(Id, message))
+                                    {
+                                        message = GetMessage();
+                                        Console.WriteLine($"Поток номер {GetClientNumber(Id)}, " + DateTime.Now.ToShortTimeString() + ": " + message.ToString());
+                                        string builder = znach[rnd.Next(0, 4)] + message.ToString();
+                                        SendMessage(builder);
+                                        server.RemoveMessage(Id, message);
+                                    }
+                                    else
+                                    {
+                                        message = GetMessage();
+                                        Console.WriteLine($"Поток номер {GetClientNumber(Id)}, " + DateTime.Now.ToShortTimeString() + ": " + message.ToString());
+                                        string builder = znach[rnd.Next(0, 4)] + message.ToString();
+                                        SendMessage(builder);
+                                        server.RemoveMessage(Id, message);
+                                        server.RemoveDuplets(message);
+                                    }                                 
                                 }
                                 else
                                 {
-                                    clientmessage.Add(Tuple.Create(Id, message));                                  
-                                    server.RemoveMessage(message);
+                                    string builder = "Повторка, но сча все буит";
+                                    SendMessage(builder);
+                                    server.RemoveMessage(Id, message);
+                                    server.AddDuplet(Id, message);
                                 }
-                                
                             }
+
                             else
                             {
                                 string message = GetMessage();
@@ -147,13 +161,13 @@ namespace TCPserver
             {
                 byte[] data = new byte[256];
                 data = Encoding.Unicode.GetBytes(builder);
-                Stream.Write(data, 0, data.Length); //отправляет сообщение первому клиенту               
-                foreach ((string elementID, string elementMESS) in clientmessage)
+                Stream.Write(data, 0, data.Length);
+                foreach ((string elementID, string elementMESS) in Dupletmessage)
                 {
-                    if(elementMESS == message)
+                    if (elementMESS == message)
                     {
-                        GetClientStream(elementID).Write(data, 0, data.Length); //отправляет сообщение клиентам с повторкой
-                    }                   
+                        GetClientStream(elementID).Write(data, 0, data.Length); 
+                    }
                 }
             }
 
@@ -180,27 +194,60 @@ namespace TCPserver
                 if (client != null)
                     clients.Remove(client);               
             }
-            protected internal void AddMessage(string message)
+            protected internal void AddMessage(string Id, string message)
             {
-                messages.Add(message);
+                clientmessage.Add(Tuple.Create(Id, message));
             }
-            protected internal void RemoveMessage(string message)
+            protected internal void RemoveMessage(string Id, string message)
             {
-                messages.Remove(message);
+                clientmessage.Remove(Tuple.Create(Id, message));
+            }
+            protected internal void AddDuplet(string Id, string message)
+            {
+                Dupletmessage.Add(Tuple.Create(Id, message));
+            }
+            protected internal void RemoveDuplets(string message)
+            {
+                foreach((string elementID, string elementMESS) in Dupletmessage)
+                {
+                    if(elementMESS == message)
+                    {
+                        Dupletmessage.Remove(Tuple.Create(elementID, elementMESS));
+                    }
+                }             
             }
             protected internal bool DupletCheck(string message)
             {
                 int i = 0;
-                foreach (string element in messages)
+                foreach ((string elementID, string elementMESS) in clientmessage)
                 {
-                    if (message == element)
+                    if (elementMESS == message)
                     {
-                        i++;                    
-                    }                   
+                        i++;
+                    }
                 }
                 if (i > 1)
                 {
                     return true;
+                }
+                else
+                {
+                    return false;
+                }
+            }
+            protected internal bool RestartCheck(string Id, string message)
+            {
+                int i = 0;
+                foreach ((string elementID, string elementMESS) in clientmessage)
+                {                
+                    if (elementID == Id && elementMESS != message)
+                    {
+                        i++;
+                    }                   
+                }
+                if (i >= 1)
+                {
+                    return true;                    
                 }
                 else
                 {
